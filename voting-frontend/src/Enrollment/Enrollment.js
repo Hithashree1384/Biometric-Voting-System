@@ -1,59 +1,10 @@
-// import React from 'react'
-// import { useState } from 'react';
-// import axios from 'axios';
-// import './Enrollment.css'
-// const Enrollment = () => {
-//     const [message, setMessage] = useState("");
-//     const ESP32_IP = "http://192.168.218.23";   // ESP32 fingerprint scanner
-//     const BACKEND_URL = "http://localhost:3000"; // Node.js backend + blockchain
-
-//     const handleEnroll = async () => {
-//         const id = prompt("Enter your Voter ID to enroll:");
-//         if (!id) return;
-    
-//         try {
-//           setMessage("📝 Enrolling fingerprint...");
-//           const res = await axios.get(`${ESP32_IP}/enroll?voter_id=${id}`);
-//           setMessage("✅ Enrolled successfully with Fingerprint ID");
-//         } catch (error) {
-//           console.log(error.response?.data || error.message);
-//           setMessage("⚠️ Enrollment failed. Maybe duplicate fingerprint?");
-//         }
-//       };
-
-//       const handleReset = async () => {
-//           try {
-//             const res = await axios.post(`${ESP32_IP}/reset`);
-//             alert(res.data.status); // "All fingerprints and voter data deleted"
-//           } catch (err) {
-//             alert("Failed to reset ESP32 data");
-//           }
-//         };
-//   return (
-//     <div className='enroll-wrapper'>
-//         <div className='enroll-box'>
-//             <button onClick={handleEnroll} style={{ marginLeft: "10px" }}>Enroll Fingerprint</button>
-//             <button onClick={handleReset} style={{ marginLeft: "10px" }}>Reset All Data</button>
-//         </div>
-//         <div className='enroll-box'>
-//             <button>Facial Recognition</button>
-//             <button onClick={handleReset} style={{ marginLeft: "10px" }}>Reset All Data</button>
-//         </div>
-//         <div className='enroll-box'>
-//             <button>Voice Recognition</button>
-//             <button onClick={handleReset} style={{ marginLeft: "10px" }}>Reset All Data</button>
-//         </div>
-//     </div>
-//   )
-// }
-
-// export default Enrollment
-
-
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import * as faceapi from 'face-api.js';
 import './Enrollment.css';
+import RecordVoiceOverIcon from '@mui/icons-material/RecordVoiceOver';
+import FingerprintIcon from '@mui/icons-material/Fingerprint';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 const MODEL_URL = process.env.PUBLIC_URL + '/models';
 
 const Enrollment = () => {
@@ -162,23 +113,34 @@ const handleFaceReset = async () => {
 
   return (
     <div className='enroll-wrapper'>
+    <div className='heading'>
+    <h1>Register To DigiVote</h1>
+    </div>
+    <div className='three-boxes'>
       <div className='enroll-box'>
+        <h1 className='enroll-box-heading'>Enroll Fingerprint</h1>
+        <FingerprintIcon style={{fontSize:'100px',color:'white'}} />
         <button onClick={handleEnroll}>Enroll Fingerprint</button>
-        <button onClick={handleReset} style={{ marginLeft: "10px" }}>Reset All Data</button>
+        <button onClick={handleReset}>Reset All Data</button>
       </div>
 
       <div className='enroll-box'>
+        <h1 className='enroll-box-heading'>Enroll Face</h1>
+        <PersonOutlineIcon style={{fontSize:'100px',color:'white'}}/>   
         <button onClick={handleFaceEnroll}>Enroll Face</button>
-        <button onClick={handleFaceReset} style={{ marginLeft: "10px" }}>Reset All Data</button>
+        <button onClick={handleFaceReset}>Reset All Data</button>
         <div>
           <video ref={videoRef} autoPlay muted width="300" height="200" />
         </div>
       </div>
 
       <div className='enroll-box'>
+          <h1 className='enroll-box-heading'>Enroll Voice</h1>
+        <RecordVoiceOverIcon style={{fontSize:'100px',color:'white'}}/>
         <button>Voice Recognition</button>
         <button  style={{ marginLeft: "10px" }}>Reset All Data</button>
       </div>
+    </div>
     </div>
   );
 };

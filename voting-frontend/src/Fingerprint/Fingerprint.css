@@ -1,0 +1,63 @@
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(to right, #1e3a8a, #161160);
+  color: #f8fafc;
+}
+
+.fp-container {
+  text-align: center;
+  margin-top: 50px;
+}
+
+.fp-step h1 {
+  margin-bottom: 20px;
+}
+
+.fp-message {
+  margin-top: 15px;
+  font-size: 16px;
+  color: #e0f2fe;
+}
+
+/* Buttons */
+.btn {
+  padding: 12px 20px;
+  font-size: 16px;
+  border: none;
+  border-radius: 8px;
+  margin: 5px;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+}
+
+.btn-primary {
+  background-color: #2563eb;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #1d4ed8;
+}
+
+.btn-secondary {
+  background-color: #64748b;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #475569;
+}
+
+/* Status messages */
+.success {
+  color: #22c55e;
+}
+
+.error {
+  color: #ef4444;
+}
