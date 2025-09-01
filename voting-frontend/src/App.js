@@ -4,8 +4,8 @@ import {createBrowserRouter, RouterProvider} from 'react-router-dom';
 import Home from './Home/Home';
 import Fingerprint from './Fingerprint/Fingerprint';
 import Facial from './Facial/FaceAuth';
-import Voice from './Voice/Voice';
 import Enrollment from './Enrollment/Enrollment';
+import VoiceAuth from './Voice/VoiceAuth';
 function App() {
  const router = createBrowserRouter([
   {path:'/',element:<Home/>},
@@ -13,7 +13,7 @@ function App() {
   {path:'/home',element:<Home/>},
   {path:'/fingerprint',element:<Fingerprint/>},
   {path:'/facial',element:<Facial/>},
-  {path:'/voice',element:<Voice/>}
+  {path:'/voiceAuth',element:<VoiceAuth/>}
 
  ])
   

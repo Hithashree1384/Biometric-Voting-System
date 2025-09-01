@@ -13,7 +13,7 @@ const Home = () => {
         navigate('/facial')
     }
     const voiceHandler = ()=>{
-        navigate('/voice')
+        navigate('/voiceAuth')
     }
   return (
     <div className='home-page-wrappper'>
