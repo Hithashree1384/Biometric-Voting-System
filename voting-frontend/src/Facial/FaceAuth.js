@@ -56,7 +56,13 @@ const FaceAuth = () => {
       });
 
       if (verifyRes.data?.voterId) {
-        setVoterId(verifyRes.data.voterId);
+        setVoterId({
+          voterId: verifyRes.data.voterId,
+          name: verifyRes.data.name,
+          age: verifyRes.data.age,
+          gender: verifyRes.data.gender,
+          address: verifyRes.data.address,
+        });
         setMessage(`✅ Face recognized! Voter ID: ${verifyRes.data.voterId}`);
       } else {
         setMessage("❌ Face not recognized. Please try again.");
@@ -64,23 +70,24 @@ const FaceAuth = () => {
     } catch (err) {
       console.error(err);
       setMessage("⚠️ Error during face verification");
+      setVoterId(null);
     }
   };
 
   // Step 2: Cast vote
   const handleVote = async () => {
-    if (!voterId) {
+    if (!voterId?.voterId) {
       setMessage("❌ Please verify your face first!");
       return;
     }
 
     setMessage("🗳️ Casting vote...");
     try {
-      const voteRes = await axios.post(`${BACKEND_URL}/vote/face`, { voterId });
+      const voteRes = await axios.post(`${BACKEND_URL}/vote/face`, {voterId: voterId.voterId,});
 
       if (voteRes.data?.tx) {
         setTxHash(voteRes.data.tx);
-        setMessage(`✅ Vote cast successfully! TX: ${voteRes.data.tx}`);
+        setMessage(`✅ Vote cast successfully! TX: ${voteRes.data.tx}</br> Thank you for voting, ${voterId.name}!`);
       } else if (voteRes.data?.alreadyVoted) {
         setMessage("⚠️ You have already voted!");
       } else {
@@ -106,8 +113,15 @@ const FaceAuth = () => {
         </button>
       </div>
       <p>{message}</p>
-      {voterId && <p>🆔 Voter ID: {voterId}</p>}
-      {txHash && <p>📄 Transaction Hash: {txHash}</p>}
+          {voterId && !txHash && (
+        <div style={{ marginTop: "10px" }}>
+          <p>🆔 Voter ID: {voterId.voterId}</p>
+          <p>👤 Name: {voterId.name}</p>
+          <p>🎂 Age: {voterId.age}</p>
+          <p>⚧ Gender: {voterId.gender}</p>
+          <p>🏠 Address: {voterId.address}</p>
+        </div>
+      )}
     </div>
   );
 };

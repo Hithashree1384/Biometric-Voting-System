@@ -34,6 +34,11 @@ void handleOptions() {
 struct Voter {
   int fingerprintId;
   String voterId;
+  String name;
+  String age;
+  String gender;
+  String address;
+
 };
 Voter voters[100];
 int voterCount = 0;
@@ -85,14 +90,24 @@ bool isDuplicate() {
 
 // ===== Handle Enroll =====
 void handleEnroll() {
-  if (!server.hasArg("voter_id")) {
-    sendJsonResponse(400, "{\"error\":\"voter_id missing\"}");
+  if (!server.hasArg("voter_id") || !server.hasArg("name") || 
+      !server.hasArg("age") || !server.hasArg("gender") || 
+      !server.hasArg("address")) {
+    sendJsonResponse(400, "{\"error\":\"Missing voter details\"}");
     return;
   }
-
   String voterId = server.arg("voter_id");
+    String name = server.arg("name");
+  String age = server.arg("age");
+  String gender = server.arg("gender");
+  String address = server.arg("address");
+
   Serial.print("Received voter_id: ");
   Serial.println(voterId);
+  Serial.print("Name: "); Serial.println(name);
+  Serial.print("Age: "); Serial.println(age);
+  Serial.print("Gender: "); Serial.println(gender);
+  Serial.print("Address: "); Serial.println(address);
 
   int newId = voterCount + 1;
 
@@ -114,11 +129,22 @@ void handleEnroll() {
   // Step 3: Store voter info
   voters[voterCount].fingerprintId = newId;
   voters[voterCount].voterId = voterId;
+  voters[voterCount].name = name;
+  voters[voterCount].age = age;
+  voters[voterCount].gender = gender;
+  voters[voterCount].address = address;
+
   voterCount++;
 
   StaticJsonDocument<200> doc;
   doc["status"] = "Enrolled successfully";
   doc["fingerprintId"] = newId;
+    // doc["voterId"] = voterId;
+  doc["name"] = name;
+  doc["age"] = age;
+  doc["gender"] = gender;
+  doc["address"] = address;
+
   String json;
   serializeJson(doc, json);
   sendJsonResponse(200, json);
@@ -150,14 +176,23 @@ void handleMatch() {
   if (id == -1) {
     doc["error"] = "Fingerprint not recognized";
   } else {
-    String voterId = "";
+      bool found = false;
     for (int i = 0; i < voterCount; i++) {
       if (voters[i].fingerprintId == id) {
-        voterId = voters[i].voterId;
+        doc["status"] = "match";
+        doc["fingerprintId"] = id;
+        doc["voterId"] = voters[i].voterId;
+        doc["name"] = voters[i].name;
+        doc["age"] = voters[i].age;
+        doc["gender"] = voters[i].gender;
+        doc["address"] = voters[i].address;
+        found = true;
         break;
       }
     }
-    doc["voterId"] = voterId;
+    if (!found) {
+      doc["error"] = "Voter not found in records";
+    }
   }
 
   String json;
@@ -172,11 +207,34 @@ void handleConfirm() {
     sendJsonResponse(400, "{\"error\":\"voter_id missing\"}");
     return;
   }
+  String voterId = server.arg("voter_id");  // ✅ get from request
+  String name = "";
+  bool found = false;
 
-  String voterId = server.arg("voter_id");
-  Serial.println("Vote cast for Voter ID: " + voterId);
+  for (int i = 0; i < voterCount; i++) {
+    if (voters[i].voterId == voterId) {
+      name = voters[i].name;  // ✅ Fetch name
+      found = true;
+      break;
+    }
+  }
 
-  sendJsonResponse(200, "{\"status\":\"Vote cast successfully\"}");
+  StaticJsonDocument<200> doc;
+  if (found) {
+    Serial.println("Vote cast for Voter ID: " + voterId + " (Name: " + name + ")");
+     Serial.println("Thank you for voting" " (Name: " + name + ")");
+
+    doc["status"] = "Vote cast successfully";
+    doc["voterId"] = voterId;
+    doc["name"] = name;   // ✅ Added to response
+  } else {
+    doc["error"] = "Voter not found";
+  }
+
+  String json;
+  serializeJson(doc, json);
+  sendJsonResponse(200, json);
+
 }
 void handleReset() {
   if (finger.emptyDatabase() != FINGERPRINT_OK) {

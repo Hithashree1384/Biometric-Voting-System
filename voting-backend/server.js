@@ -14,7 +14,7 @@ const web3 = new Web3("http://localhost:9545"); // Ganache
 const FACES_FILE = path.join(__dirname, "faces.json");
 let faces = [];
 // Load existing faces
-function loadFaces() {
+function loadFaces() { 
   try {
     const data = fs.readFileSync(FACES_FILE, "utf-8");
     faces = JSON.parse(data); // reload from file
@@ -156,7 +156,7 @@ function voterExists(voterId) {
 app.post("/enroll-face", (req, res) => {
   loadFaces();
     console.log("Enroll-face request body:", req.body);
-    let { voterId, descriptor } = req.body;
+    let { voterId, descriptor,name, age, gender, address  } = req.body;
 
     if (!voterId || !descriptor) 
         return res.status(400).json({ message: "voter_id and descriptor are required" });
@@ -176,7 +176,7 @@ app.post("/enroll-face", (req, res) => {
     }
 
   // Save new face
-  faces.push({ voterId, descriptor });
+  faces.push({ voterId, descriptor, name, age, gender, address });
     try {
         fs.writeFileSync(FACES_FILE, JSON.stringify(faces, null, 2));
     } catch (err) {
@@ -242,6 +242,10 @@ app.post("/verify-face", (req, res) => {
     return res.json({
       message: "Face verified",
       voterId: bestMatch.voterId,
+      name: bestMatch.name,
+      age: bestMatch.age,
+      gender: bestMatch.gender,
+      address: bestMatch.address,
       distance: minDistance,
     });
   }
@@ -276,8 +280,15 @@ app.post("/vote/face", async (req, res) => {
       from: senderAddress,
       gas: 200000,
     });
+    loadFaces();
+    const voter = faces.find(f => String(f.voterId) === String(voterId));
+    const voterName = voter ? voter.name : "Voter";
 
-    res.json({ message: "Vote cast via face recognition!", tx: receipt.transactionHash });
+   
+    res.json({
+      message: `Vote cast successfully! Voter ID: ${voterId}. Thank you for voting, ${voterName}!`,
+      tx: receipt.transactionHash
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
