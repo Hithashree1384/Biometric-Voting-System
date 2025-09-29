@@ -87,7 +87,7 @@ const FaceAuth = () => {
 
       if (voteRes.data?.tx) {
         setTxHash(voteRes.data.tx);
-        setMessage(`✅ Vote cast successfully! TX: ${voteRes.data.tx}</br> Thank you for voting, ${voterId.name}!`);
+        setMessage(`✅ Vote cast successfully! TX: ${voteRes.data.tx} Thank you for voting, ${voterId.name}!`);
       } else if (voteRes.data?.alreadyVoted) {
         setMessage("⚠️ You have already voted!");
       } else {
@@ -112,16 +112,19 @@ const FaceAuth = () => {
           Cast Vote
         </button>
       </div>
+      <div style={{ marginTop: 16,marginLeft:500,marginRight:400, padding: 56, border: "1px solid #ccc", borderRadius: 12, textAlign: "left",  }}>
       <p>{message}</p>
           {voterId && !txHash && (
         <div style={{ marginTop: "10px" }}>
-          <p>🆔 Voter ID: {voterId.voterId}</p>
-          <p>👤 Name: {voterId.name}</p>
-          <p>🎂 Age: {voterId.age}</p>
-          <p>⚧ Gender: {voterId.gender}</p>
-          <p>🏠 Address: {voterId.address}</p>
+          <p>Voter ID: {voterId.voterId}</p>
+          <p> Name: {voterId.name}</p>
+          <p> Age: {voterId.age}</p>
+          <p> Gender: {voterId.gender}</p>
+          <p> Address: {voterId.address}</p>
         </div>
+        
       )}
+      </div>
     </div>
   );
 };

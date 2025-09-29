@@ -95,11 +95,13 @@ const Fingerprint = () => {
       {step === 2 && (
         <div className="fp-step">
           <h1>Voter ID Found: {voterId}</h1>
+          <div style={{ marginTop: 16, padding: 56,marginLeft:500,marginRight:500, border: "1px solid #ccc", borderRadius: 12, textAlign: "left",  }}>
           <p><strong>Name:</strong> {voterDetails.name}</p>
           <p><strong>Age:</strong> {voterDetails.age}</p>
           <p><strong>Gender:</strong> {voterDetails.gender}</p>
           <p><strong>Address:</strong> {voterDetails.address}</p>
           <p>Is this your voter ID?</p>
+          </div>
           <div className="btn-group">
             <button className="btn btn-secondary" onClick={() => setStep(4)}>
               No

@@ -39,7 +39,7 @@
     flex-direction: column;
     justify-content:flex-start;
     align-items: center;
-    width: 100%;
+    width: 90%;
     gap:50px;
     height:80vh;
     background:linear-gradient(to right,rgb(4, 12, 65),rgb(8, 8, 130),rgb(15, 66, 194));
@@ -69,4 +69,9 @@ background:linear-gradient(to right,rgb(5, 49, 83),rgb(3, 66, 91));
     color: black;
     box-shadow:2px 2px 2px white ;
     cursor: pointer;
+}
+p {
+  color: rgb(246, 243, 243) !important;
+
+
 }

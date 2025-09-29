@@ -463,6 +463,45 @@ app.post("/voice/verify", (req, res) => {
   }
 });
 
+// app.post("/vote/voice", async (req, res) => {
+//   let { voterId } = req.body;
+//   voterId = Number(voterId);
+
+//   if (!voterId) {
+//     return res.status(400).json({ error: "voterId is required" });
+//   }
+
+//   console.log("🎤 Voice vote received");
+//   console.log("Request body:", req.body);
+
+//   try {
+//     // 🔎 Check if voter has already voted on blockchain
+//     const alreadyVoted = await contract.methods.checkVoted(voterId).call();
+//     console.log(`Voter ${voterId} already voted?`, alreadyVoted);
+
+//     if (alreadyVoted) {
+//       return res.status(200).json({
+//         message: "⚠️ This voter has already voted.",
+//         alreadyVoted: true,
+//       });
+//     }
+
+//     // 🗳️ Cast the vote on blockchain
+//     const receipt = await contract.methods.vote(voterId).send({
+//       from: senderAddress,
+//       gas: 200000,
+//     });
+
+//     res.json({
+//       message: `🗳️ Voice vote cast successfully! Voter ID: ${voterId}.`,
+//       tx: receipt.transactionHash,
+//     });
+//   } catch (err) {
+//     console.error("❌ Voice vote error:", err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
 app.post("/vote/voice", async (req, res) => {
   let { voterId } = req.body;
   voterId = Number(voterId);
@@ -480,7 +519,7 @@ app.post("/vote/voice", async (req, res) => {
     console.log(`Voter ${voterId} already voted?`, alreadyVoted);
 
     if (alreadyVoted) {
-      return res.status(200).json({
+      return res.status(403).json({
         message: "⚠️ This voter has already voted.",
         alreadyVoted: true,
       });
@@ -493,6 +532,7 @@ app.post("/vote/voice", async (req, res) => {
     });
 
     res.json({
+      success: true,
       message: `🗳️ Voice vote cast successfully! Voter ID: ${voterId}.`,
       tx: receipt.transactionHash,
     });

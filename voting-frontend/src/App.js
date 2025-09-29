@@ -1,25 +1,26 @@
-import logo from './logo.svg';
 import './App.css';
-import {createBrowserRouter, RouterProvider} from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Home from './Home/Home';
 import Fingerprint from './Fingerprint/Fingerprint';
 import Facial from './Facial/FaceAuth';
 import Enrollment from './Enrollment/Enrollment';
 import VoiceAuth from './Voice/VoiceAuth';
-function App() {
- const router = createBrowserRouter([
-  {path:'/',element:<Home/>},
-  {path:'/enroll',element:<Enrollment/> },
-  {path:'/home',element:<Home/>},
-  {path:'/fingerprint',element:<Fingerprint/>},
-  {path:'/facial',element:<Facial/>},
-  {path:'/voiceAuth',element:<VoiceAuth/>}
+import VoiceEnroll from './Enrollment/Voice_enroll';
 
- ])
-  
+function App() {
   return (
     <div className="App">
-        <RouterProvider router={router}/>
+      <Router>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/home" element={<Home />} />
+          <Route path="/enroll" element={<Enrollment />} />
+          <Route path="/fingerprint" element={<Fingerprint />} />
+          <Route path="/facial" element={<Facial />} />
+          <Route path="/voiceAuth" element={<VoiceAuth />} />
+          <Route path="/voice-enroll" element={<VoiceEnroll />} />
+        </Routes>
+      </Router>
     </div>
   );
 }
