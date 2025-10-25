@@ -145,9 +145,16 @@ const handleVoiceEnroll = () => {
   navigate("/voice-enroll");  // go to new page
 };
 
-  const handleVoiceReset = async () => {
-    setVoiceMessage("✅ Voice data reset.");
-  };
+const handleVoiceReset = async () => {
+  try {
+    const res = await axios.post(`${BACKEND_URL}/reset-voice`);
+    setVoiceMessage(res.data.status);
+  } catch (err) {
+    console.error(err);
+    setVoiceMessage("⚠️ Failed to reset voice data");
+  }
+};
+
 
   return (
     <div className="enroll-wrapper">

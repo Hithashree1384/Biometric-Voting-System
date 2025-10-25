@@ -1,185 +1,170 @@
-import React, { useEffect, useRef, useState } from "react";
-import Meyda from "meyda";
+import React, { useState, useRef } from "react";
 import axios from "axios";
 
-const PASSPHRASE = "secure vote"; // fixed phrase for auth
-const SAMPLE_RATE = 16000;
-const BACKEND = "http://localhost:3000"; // backend API
+const PASSPHRASE = "Your name";
+const BACKEND = "http://localhost:3000";
+const MIN_BLOB_SIZE = 2000;
 
 const VoiceAuth = () => {
-  const [mode, setMode] = useState("idle"); // idle | verifying
-  const [message, setMessage] = useState("Ready.");
-  const [voterId, setVoterId] = useState("");
-
+  const [step, setStep] = useState(1); // 1=verify, 2=voter details, 3=party selection, 4=success
+  const [message, setMessage] = useState("Passphrase: Your name");
   const [recording, setRecording] = useState(false);
   const [matched, setMatched] = useState(null);
-  const audioCtxRef = useRef(null);
-  const sourceRef = useRef(null);
-  const processorRef = useRef(null);
-  const streamRef = useRef(null);
-  const meydaAnalyzerRef = useRef(null);
+  const [selectedParty, setSelectedParty] = useState(null);
+  const [txHash, setTxHash] = useState(null);
 
-  const framesRef = useRef([]); // holds MFCC frames
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
 
-  useEffect(() => {
-    return () => stopAudioGraph();
-  }, []);
-
-  async function initAudio() {
-    if (audioCtxRef.current) return;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    streamRef.current = stream;
-
-    const ctx = new (window.AudioContext || window.webkitAudioContext)({
-      sampleRate: SAMPLE_RATE,
-    });
-    audioCtxRef.current = ctx;
-
-    const source = ctx.createMediaStreamSource(stream);
-    sourceRef.current = source;
-
-    const bufferSize = 1024;
-    const processor = ctx.createScriptProcessor(bufferSize, 1, 1);
-    processorRef.current = processor;
-
-    source.connect(processor);
-    processor.connect(ctx.destination);
-
-    meydaAnalyzerRef.current = Meyda.createMeydaAnalyzer({
-      audioContext: ctx,
-      source,
-      bufferSize,
-      featureExtractors: ["mfcc", "rms", "zcr"],
-      callback: (features) => {
-        if (features && features.rms > 0.01) {
-          framesRef.current.push(features.mfcc);
-        }
-      },
-    });
-  }
-
-  function startCapture() {
-    framesRef.current = [];
-    meydaAnalyzerRef.current?.start();
+  const handleVerify = async () => {
+    setMessage(`🎙️ Verification: Say "${PASSPHRASE}"`);
     setRecording(true);
-  }
+    setMatched(null);
+    setSelectedParty(null);
 
-  function stopCapture() {
-    meydaAnalyzerRef.current?.stop();
-    setRecording(false);
-  }
-
-  function stopAudioGraph() {
     try {
-      meydaAnalyzerRef.current?.stop();
-      processorRef.current?.disconnect();
-      sourceRef.current?.disconnect();
-      audioCtxRef.current?.close();
-      streamRef.current?.getTracks()?.forEach((t) => t.stop());
-    } catch { }
-  }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
 
-  async function handleVerify() {
-    setMatched(null);
-    setMode("verifying");
-    setMessage(`Verification: Say “${PASSPHRASE}”`);
-    await initAudio();
-    startCapture();
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
 
-    setTimeout(async () => {
-      stopCapture();
-      const mfccFrames = framesRef.current.slice();
-      if (mfccFrames.length < 5) {
-        setMessage("Too little speech detected. Try again.");
-        setMode("idle");
-        return;
-      }
-      try {
-        const { data } = await axios.post(`${BACKEND}/voice/verify`, {
-          passphrase: PASSPHRASE,
-          mfccFrames,
-        });
-        if (data?.verified === true) {
-          setMatched({
-            voterId: data.voterId,
-            name: data.name,
-            age: data.age,
-            gender: data.gender,
-            address: data.address,
-            similarity: data.similarity,
-          });
-          setMessage(`✅ Verified voter: ${data.voterId}`);
-        } else {
-          setMatched(null);
-          setMessage(`❌ No match. ${data?.reason ?? ""}`);
+      mediaRecorderRef.current.onstop = async () => {
+        const blob = new Blob(audioChunksRef.current);
+        if (blob.size < MIN_BLOB_SIZE) {
+          setMessage("❌ Audio too short. Please speak louder or longer.");
+          setRecording(false);
+          return;
         }
-      } catch (e) {
-        console.error(e);
-        setMessage("Verification failed. Check backend.");
-      } finally {
-        setMode("idle");
-      }
-    }, 2000);
-  }
 
-const castVote = async (voterId, name) => {
-  try {
-    const res = await axios.post(`${BACKEND}/vote/voice`, { voterId });
-    setMessage(`✅ Vote cast successfully! Voter ID: ${voterId}. Thank you for voting, ${name}!`);
-    setMatched(null);
-  } catch (err) {
-    if (err.response) {
-      if (err.response.status === 403) {
-        // Already voted
-        setMessage(err.response.data.message || "⚠️ You have already voted.");
-      } else {
-        setMessage("❌ Error: " + (err.response.data?.error || err.message));
-      }
-    } else {
-      setMessage("❌ Network error. Please try again.");
+        const formData = new FormData();
+        formData.append("audio", blob, "sample.webm");
+
+        try {
+          const { data } = await axios.post(`${BACKEND}/verify-voice`, formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+
+          if (data?.success) {
+            setMatched({
+              voterId: data.match,
+              name: data.voterDetails?.name ?? "Unknown",
+              age: data.voterDetails?.age ?? "Unknown",
+              gender: data.voterDetails?.gender ?? "Unknown",
+              address: data.voterDetails?.address ?? "Unknown",
+            });
+            setMessage(`✅ Verified speaker: ${data.match}`);
+            setStep(2); // go to voter details
+          } else {
+            setMatched(null);
+            setMessage(`❌ No match. ${data?.message ?? ""}`);
+          }
+        } catch (err) {
+          console.error(err);
+          setMessage("❌ Verification failed. Check backend.");
+        } finally {
+          setRecording(false);
+        }
+      };
+
+      mediaRecorderRef.current.start();
+      setTimeout(() => mediaRecorderRef.current.stop(), 7000);
+    } catch (err) {
+      console.error(err);
+      setMessage("❌ Cannot access microphone.");
+      setRecording(false);
     }
-    console.error("❌ Vote error:", err);
-  }
-};
+  };
 
+  const handleNext = () => {
+    setStep(3); // go to party selection
+  };
+
+  const castVote = async () => {
+    if (!matched?.voterId || !selectedParty) {
+      setMessage("⚠️ Please select a party before casting vote.");
+      return;
+    }
+
+    setMessage("🗳️ Casting vote...");
+
+    try {
+      const res = await axios.post(`${BACKEND}/vote/voice`, {
+        voterId: matched.voterId,
+        party: selectedParty,
+      });
+      setTxHash(res.data?.tx ?? "N/A");
+      setStep(4); // success page
+      setMessage("");
+    } catch (err) {
+      console.error(err);
+      setMessage(err.response?.data?.error || "❌ Error casting vote.");
+    }
+  };
 
   return (
     <div style={{ maxWidth: 560, margin: "24px auto", padding: 16, border: "1px solid #eee", borderRadius: 12 }}>
       <h2>Voice Authentication</h2>
-      
 
-      <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
-      
-
-        <button
-          onClick={handleVerify}
-          disabled={mode !== "idle" || recording}
-          style={{ padding: 10, borderRadius: 8 }}
-        >
-          {recording && mode === "verifying" ? "Listening..." : "Verify & Match"}
+      {step === 1 && (
+        <button onClick={handleVerify} disabled={recording} style={{ padding: 10, borderRadius: 8 }}>
+          {recording ? "🎧 Listening..." : "Verify & Match"}
         </button>
+      )}
 
-        <div style={{ marginTop: 8, fontFamily: "monospace" }}>{message}</div>
+      {/* STEP 2: Display Voter Details */}
+      {step === 2 && matched && (
+        <div style={{ marginTop: 16, padding: 16, border: "1px solid #ccc", borderRadius: 8 }}>
+          <div><strong>Voter ID:</strong> {matched.voterId}</div>
+          <div><strong>Name:</strong> {matched.name}</div>
+          <div><strong>Age:</strong> {matched.age}</div>
+          <div><strong>Gender:</strong> {matched.gender}</div>
+          <div><strong>Address:</strong> {matched.address}</div>
+          <button style={{ marginTop: 12 }} onClick={handleNext}>Next</button>
+        </div>
+      )}
 
-        {matched && (
-          <div style={{ marginTop: 16, padding: 56, border: "1px solid #ccc", borderRadius: 12, textAlign: "left",  }}>
-            <div>Matched voter ID: <strong>{matched.voterId}</strong></div>
-            <div>Name: {matched.name}</div>
-            <div>Age: {matched.age}</div>
-            <div>Gender: {matched.gender}</div>
-            <div>Address: {matched.address}</div>
-
-            <div style={{ marginTop: 8 }}>
-              <button
-                onClick={() => castVote(matched.voterId, matched.name)}
-                style={{ padding: 10, borderRadius: 8 }}
-              >
-                🗳️ Cast Vote
-              </button>
-            </div>
+      {/* STEP 3: Party Selection */}
+      {step === 3 && (
+        <div style={{ marginTop: 16, padding: 16, border: "1px solid #ccc", borderRadius: 8 }}>
+          <div>Select Party:</div>
+          <button
+            onClick={() => setSelectedParty("A")}
+            style={{ padding: 8, margin: 4, background: selectedParty === "A" ? "#4CAF50" : "" }}
+          >
+            🟢 Party A
+          </button>
+          <button
+            onClick={() => setSelectedParty("B")}
+            style={{ padding: 8, margin: 4, background: selectedParty === "B" ? "#4CAF50" : "" }}
+          >
+            🔵 Party B
+          </button>
+          <div>
+            <button onClick={castVote} disabled={!selectedParty} style={{ marginTop: 12, padding: 10, borderRadius: 8 }}>
+              🗳️ Cast Vote
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* STEP 4: Success */}
+      {step === 4 && (
+        <div style={{ marginTop: 16 }}>
+          <h3>✅ Vote cast for Party {selectedParty}!</h3>
+          <p>Transaction: {txHash}</p>
+          <p>Thank you for voting, {matched?.name}!</p>
+        </div>
+      )}
+
+      {/* Message Box */}
+      {message && (
+        <div style={{ marginTop: 16, padding: 12, border: "1px solid #ccc", borderRadius: 8 }}>
+          <p>{message}</p>
+        </div>
+      )}
     </div>
   );
 };

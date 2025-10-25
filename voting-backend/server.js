@@ -3,13 +3,18 @@ const Web3 = require("web3").default;
 const cors = require("cors");
 require("dotenv").config();
 const bodyParser = require("body-parser");
+const axios = require("axios");
+const multer = require("multer");
+const ffmpeg = require("fluent-ffmpeg");
 
+const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const app = express();
 app.use(cors());
-app.use(express.json());
-app.use(bodyParser.json({ limit: "5mb" }));
+
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ limit: "100mb", extended: true }));
 
 // At the top of server.js
 const enrollBuffer = new Map();  // for voice enrollment
@@ -300,247 +305,239 @@ app.post("/vote/face", async (req, res) => {
   }
 });
 //voice
-// --- helpers ---
 
 
- 
+// ------------------- CAST VOTE WITH VOICE -------------------
 
-// Collapse an utterance (many frames) into an "average frame" for template building
-function collapseUtterances(utterances) {
-  // flatten utterances: [[frames],[frames],[frames]]
-  const allFrames = utterances.flat();
-  // average across frames
-  return allFrames[0].map((_, col) =>
-    allFrames.reduce((sum, row) => sum + row[col], 0) / allFrames.length
-  );
-}
-
-// --- routes ---
-
-
-app.post("/voice/enroll", (req, res) => {
-  const { voterId,name,age ,gender,address, mfccFrames } = req.body;
-
-  if (!voterId || !mfccFrames?.length) {
-    return res.status(400).json({ error: "Missing voterId or mfccFrames" });
-  }
-   let enrollment;
-
-  // Initialize voter if not exists
-  if (!voiceprints.has(voterId)) {
-       enrollment = { voterId, name, age, gender, address, utterances: [], template: null };
-    voiceprints.set(voterId, enrollment);
-  } else {
-    // Update extra details even if voter already exists
-    enrollment = voiceprints.get(voterId);
-    enrollment.name = name;
-    enrollment.age = age;
-    enrollment.gender = gender;
-    enrollment.address = address;
-  }
-
-
-  // Store utterance
-  enrollment.utterances.push(mfccFrames);
-  console.log(`✅ Stored utterance #${enrollment.utterances.length} for ${voterId}`);
-
-  // If we now have 3 utterances, create final template
-  if (enrollment.utterances.length >= 3) {
-    const merged = collapseUtterances(enrollment.utterances);
-
-    // Save the stable template
-    enrollment.template = merged;
-
-    // Clear raw utterances if you only want to keep final template
-    // enrollment.utterances = [];
-
-    console.log(`🎉 Final template created for voter ${voterId}`);
-    return res.json({
-      enrolled: true,
-      voterId,
-      name: enrollment.name,
-      age: enrollment.age,
-      gender:enrollment.gender,
-      address:enrollment.address,
-      status: "complete",
-      message: "Enrollment finished with stable template"
-    });
-  }
-
-  // Still waiting for more utterances
-  return res.json({
-    enrolled: true,
-    voterId,
-     name: enrollment.name,
-      age: enrollment.age,
-      gender:enrollment.gender,
-      address:enrollment.address,
-    status: `waiting_for_${3 - enrollment.utterances.length}_more`,
-    message: "Please record again"
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) => {
+    // Force .wav extension for consistency
+    const name = path.parse(file.originalname).name + ".wav";
+    cb(null, name);
+  },
+});
+const upload = multer({ storage });
+const convertToWav = (inputPath, outputPath) => {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .outputOptions(["-ac 1", "-ar 16000", "-f wav"])
+      .save(outputPath)
+      .on("end", resolve)
+      .on("error", reject);
   });
- });
+};
 
 
 
-function cosineSim(a, b) {
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
-    return 0;
-  }
-  let dot = 0, normA = 0, normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  if (normA === 0 || normB === 0) return 0;
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
-function dtwDistance(seqA, seqB) {
-  const n = seqA.length, m = seqB.length;
-  if (n === 0 || m === 0) return Infinity;
+app.post("/voice/enroll", upload.single("audio"), async (req, res) => {
+  const { voterId, name, age, gender, address } = req.body;
+  if (!voterId || !req.file)
+    return res.status(400).json({ error: "Voter ID and audio required" });
 
-  const cost = (a, b) => {
-    let s = 0;
-    for (let i = 0; i < a.length; i++) {
-      const d = a[i] - b[i];
-      s += d * d;
-    }
-    return Math.sqrt(s);
-  };
+  const audioPath = path.resolve(req.file.path);
+  const convertedPath = audioPath.replace(
+  ".wav",
+  `_v${voterId}_${Date.now()}_converted.wav`
+);
+await convertToWav(audioPath, convertedPath);
+  try {
 
-  const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(Infinity));
-  dp[0][0] = 0;
+    console.log("🎙️ Enrolling voice for Voter ID:", voterId);
+    console.log("Converted file:", convertedPath);
 
-  for (let i = 1; i <= n; i++) {
-    for (let j = 1; j <= m; j++) {
-      const c = cost(seqA[i - 1], seqB[j - 1]);
-      dp[i][j] = c + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
-    }
-  }
-  return dp[n][m] / (n + m); // normalized by length
-}
+    // --- Call Python script for enrollment ---
+    const pythonProcess = spawn("python", [
+  path.resolve(__dirname, "../voice_auth/main.py"),
+  "enroll",         // or "verify"
+  convertedPath,
+  voterId            // only needed for enrollment
+]);
 
-app.post("/voice/verify", (req, res) => {
-  const { mfccFrames } = req.body;
+    let output = "";
+    pythonProcess.stdout.on("data", (data) => {
+      output += data.toString();
+    });
 
-  if (!mfccFrames || mfccFrames.length === 0) {
-    return res.status(400).json({ error: "no_voice_data" });
-  }
+    pythonProcess.stderr.on("data", (data) => {
+      console.error("Python error:", data.toString());
+    });
 
-  let bestVoterId = null;
-  let bestScore = Infinity;
-  let matchedEnrollment = null;
+    pythonProcess.on("close", (code) => {
+      if (code !== 0)
+        return res.status(500).json({ error: "Python enrollment failed" });
+
+      try {
+        const votersFile = path.resolve(__dirname, "voters.json");
+        let voters = {};
+        if (fs.existsSync(votersFile)) {
+          voters = JSON.parse(fs.readFileSync(votersFile, "utf-8"));
+        }
+          voters[voterId] = { name, age, gender, address };
+        fs.writeFileSync(votersFile, JSON.stringify(voters, null, 2));
 
 
-  // Compare against all enrolled templates (sequences)
-  for (const [id, enrollment] of voiceprints.entries()) {
-    if (!enrollment.utterances || enrollment.utterances.length === 0) continue;
+        // Parse only JSON part of Python output
+        const lines = output.trim().split("\n");
+        const jsonOutput = lines[lines.length - 1];
+        const result = JSON.parse(jsonOutput);
 
-    for (const utterance of enrollment.utterances) {
-      const dist = dtwDistance(mfccFrames, utterance);
-      if (dist < bestScore) {
-        bestScore = dist;
-        bestVoterId = id;
-        matchedEnrollment = enrollment;
+
+        
+        res.json(result);
+      } catch (err) {
+        console.error("JSON parse error:", err, "Output:", output);
+        res.status(500).json({ error: "Invalid Python output" });
       }
-    }
-  }
-
-  const THRESHOLD = 25; // adjust based on testing
-
-  if (bestScore < THRESHOLD) {
-    console.log(`✅ Voice matched with ${bestVoterId} (DTW distance ${bestScore})`);
-    return res.json({ verified: true, 
-      voterId: bestVoterId, 
-     name: matchedEnrollment.name,
-    age: matchedEnrollment.age,
-    gender: matchedEnrollment.gender,
-    address: matchedEnrollment.address,
-       similarity: 1 - bestScore / THRESHOLD });
-  } else {
-    console.log(`❌ No strong match found (best distance ${bestScore})`);
-    return res.json({ verified: false, similarity: 0 });
+    });
+  } catch (err) {
+    console.error("Audio conversion error:", err);
+    res.status(500).json({ error: "Audio processing failed" });
   }
 });
 
-// app.post("/vote/voice", async (req, res) => {
-//   let { voterId } = req.body;
-//   voterId = Number(voterId);
+// ------------------- VOICE VERIFICATION -------------------
 
-//   if (!voterId) {
-//     return res.status(400).json({ error: "voterId is required" });
-//   }
+app.post("/verify-voice", upload.single("audio"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Audio file required" });
 
-//   console.log("🎤 Voice vote received");
-//   console.log("Request body:", req.body);
+  const audioPath = path.resolve(req.file.path);
+  const convertedPath = audioPath.replace(".wav", `_converted_${Date.now()}.wav`);
 
-//   try {
-//     // 🔎 Check if voter has already voted on blockchain
-//     const alreadyVoted = await contract.methods.checkVoted(voterId).call();
-//     console.log(`Voter ${voterId} already voted?`, alreadyVoted);
+  try {
+    // Convert audio to 16kHz mono WAV
+    await convertToWav(audioPath, convertedPath);
 
-//     if (alreadyVoted) {
-//       return res.status(200).json({
-//         message: "⚠️ This voter has already voted.",
-//         alreadyVoted: true,
-//       });
-//     }
+    // Log file info for debugging
+    const stats = fs.statSync(convertedPath);
+    console.log("🎧 Verifying voice:", convertedPath);
+    console.log("🗂️ Converted file size:", stats.size, "bytes");
+    if (stats.size === 0) {
+      return res.status(400).json({ error: "Converted audio is empty!" });
+    }
 
-//     // 🗳️ Cast the vote on blockchain
-//     const receipt = await contract.methods.vote(voterId).send({
-//       from: senderAddress,
-//       gas: 200000,
-//     });
+    // Spawn Python process
+    const pythonProcess = spawn("python", [
+      path.resolve(__dirname, "../voice_auth/main.py"),
+      "verify",
+      convertedPath
+    ]);
 
-//     res.json({
-//       message: `🗳️ Voice vote cast successfully! Voter ID: ${voterId}.`,
-//       tx: receipt.transactionHash,
-//     });
-//   } catch (err) {
-//     console.error("❌ Voice vote error:", err);
-//     res.status(500).json({ error: err.message });
-//   }
-// });
+    let output = "";
+    pythonProcess.stdout.on("data", (data) => (output += data.toString()));
+    pythonProcess.stderr.on("data", (data) => console.error("Python error:", data.toString()));
 
+    pythonProcess.on("close", (code) => {
+      if (code !== 0) return res.status(500).json({ error: "Python script failed" });
+
+      try {
+        const lines = output.trim().split("\n");
+        const jsonOutput = lines[lines.length - 1];
+        const result = JSON.parse(jsonOutput);
+
+
+        const votersFile = path.resolve(__dirname, "voters.json");
+        let voterDetails = { name: "Unknown", age: "Unknown", gender: "Unknown", address: "Unknown" };
+        if (fs.existsSync(votersFile)) {
+          const voters = JSON.parse(fs.readFileSync(votersFile, "utf-8"));
+          const key = result.match?.toString();
+          if (key && voters[key]) {
+              voterDetails = voters[key];
+          }
+          console.log("Resolved voters file:", votersFile);
+          console.log("Loaded voters:", voters);
+          console.log("Looking for key:", key);
+
+    }
+
+        // Log prediction probabilities for debugging
+          if (result.probabilities) {
+          console.log("📊 Probabilities:", result.probabilities);
+          console.log("Best match:", result.match, "Confidence:", result.confidence);
+          console.log("Voter details:", voterDetails);
+          }
+        
+
+        res.json({ ...result, voterDetails });
+      } catch (err) {
+        console.error("JSON parse error:", err, "Output:", output);
+        res.status(500).json({ error: "Invalid Python output" });
+      }
+    });
+  } catch (err) {
+    console.error("Audio conversion error:", err);
+    res.status(500).json({ error: "Audio processing failed" });
+  }
+});
+
+// Voice vote with blockchain
 app.post("/vote/voice", async (req, res) => {
-  let { voterId } = req.body;
-  voterId = Number(voterId);
+  const { voterId } = req.body;
 
   if (!voterId) {
     return res.status(400).json({ error: "voterId is required" });
   }
 
-  console.log("🎤 Voice vote received");
-  console.log("Request body:", req.body);
+  console.log("🔔 Voice vote received at backend for voterId:", voterId);
 
   try {
-    // 🔎 Check if voter has already voted on blockchain
+    // Check if voter already voted on blockchain
     const alreadyVoted = await contract.methods.checkVoted(voterId).call();
     console.log(`Voter ${voterId} already voted?`, alreadyVoted);
 
     if (alreadyVoted) {
-      return res.status(403).json({
-        message: "⚠️ This voter has already voted.",
-        alreadyVoted: true,
-      });
+      return res.status(400).json({ error: "This voter has already voted." });
     }
 
-    // 🗳️ Cast the vote on blockchain
+    // Cast the vote on blockchain
     const receipt = await contract.methods.vote(voterId).send({
       from: senderAddress,
       gas: 200000,
     });
 
-    res.json({
-      success: true,
-      message: `🗳️ Voice vote cast successfully! Voter ID: ${voterId}.`,
-      tx: receipt.transactionHash,
+    res.status(200).json({
+      message: `Vote cast successfully! Voter ID: ${voterId}. Thank you for voting!`,
+      tx: receipt.transactionHash
     });
+
   } catch (err) {
-    console.error("❌ Voice vote error:", err);
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
+const X_FILE = "X.npy";
+const Y_FILE = "y.npy";
+const MODEL_FILE = "spk_clf_resemblyzer.joblib";
+const VOTERS_FILE = path.join(__dirname, "voters.json");
+const UPLOADS_DIR = path.join(__dirname, "uploads");
+
+app.post("/reset-voice", async (req, res) => {
+  try {
+    // Delete embeddings files if exist
+    if (fs.existsSync(X_FILE)) fs.unlinkSync(X_FILE);
+    if (fs.existsSync(Y_FILE)) fs.unlinkSync(Y_FILE);
+    // Delete classifier if exists
+    if (fs.existsSync(MODEL_FILE)) fs.unlinkSync(MODEL_FILE);
+    if (fs.existsSync(VOTERS_FILE)) fs.writeFileSync(VOTERS_FILE, JSON.stringify({}));
+    if (fs.existsSync(UPLOADS_DIR)) {
+      const files = fs.readdirSync(UPLOADS_DIR);
+      for (const file of files) {
+        fs.unlinkSync(path.join(UPLOADS_DIR, file));
+      }
+    }
+
+    res.json({ status: "✅ All voice data has been reset." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ status: "⚠️ Failed to reset voice data." });
+  }
+});
+
+
+
+
+
+
 
 
 app.get("/", (req, res) => {

@@ -21,7 +21,7 @@ def load_embeddings(data_dir):
     return np.vstack(X), np.array(y)
 
 if __name__ == "__main__":
-    X, y = load_embeddings("data")
+    X, y = load_embeddings("voting-backend/uploads")
 
     if len(set(y)) < 2:
         raise ValueError("❌ Need at least 2 different speakers to train the model!")
